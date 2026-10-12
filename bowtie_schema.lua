@@ -1,6 +1,7 @@
 local schema = require 'schema'
 local json = require 'dkjson'
-local utils = require 'schema.utils'
+local escape_jsonptr = require'schema.utils'.escape_jsonptr
+local resolve_uri = require'schema.utils'.resolve_uri
 
 local modnames = {
   ['https://json-schema.org/draft/2020-12/schema'] = 'schema.draft2020-12',
@@ -78,20 +79,23 @@ end
 
 local function resource_pointers(document)
   local pointers = {}
-  local walk
-  walk = function(node, pointer, base)
+
+  local function walk(node, pointer, base)
     if type(node) ~= 'table' then
       return
     end
     local current = base
-    if type(node['$id']) == 'string' then
-      current = base ~= '' and utils.resolve_uri(base, node['$id']) or node['$id']
+    -- `$id` from draft-06 onwards, `id` in draft-04
+    local id = node['$id'] or node.id
+    if type(id) == 'string' then
+      current = base ~= '' and resolve_uri(base, id) or id
       pointers[current] = pointer
     end
     for key, value in pairs(node) do
-      walk(value, pointer .. '/' .. utils.escape_jsonptr(key), current)
+      walk(value, pointer .. '/' .. escape_jsonptr(key), current)
     end
   end
+
   walk(document, '', '')
   return pointers
 end
@@ -115,10 +119,6 @@ local function keyword_location(absolute, evaluated, pointers)
   return '#' .. fragment
 end
 
-local function keyword_name(location)
-  return location:match '[^/]*$'
-end
-
 local function bowtie_annotations(result, pointers)
   local annotations = {}
   if not result.valid then
@@ -127,8 +127,9 @@ local function bowtie_annotations(result, pointers)
   for _, annotation in ipairs(result.annotations or {}) do
     local location = keyword_location(
       annotation.absoluteKeywordLocation, annotation.keywordLocation, pointers)
+    local keyword = location:match '[^/]*$'
     annotations[#annotations + 1] = {
-      keyword = keyword_name(location),
+      keyword = keyword,
       instanceLocation = annotation.instanceLocation or '',
       keywordLocation = location,
       annotation = annotation.annotation,
@@ -202,7 +203,7 @@ local cmds = {
           },
         }
       end
-      local pointers = want_annotations and resource_pointers(case.schema)
+      local pointers = want_annotations and resource_pointers(case.schema) or nil
       for i = 1, #case.tests do
         local test = case.tests[i]
         reason = skipped2[case.description][test.description]
