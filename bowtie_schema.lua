@@ -100,7 +100,9 @@ local function resource_pointers(document)
   return pointers
 end
 
-local function keyword_location(absolute, evaluated, pointers)
+local function keyword_location(annotation, pointers)
+  local absolute = annotation.absoluteKeywordLocation
+  local evaluated = annotation.keywordLocation
   local fragment
   if absolute and #absolute > 0 then
     local hash = absolute:find('#', 1, true)
@@ -125,8 +127,7 @@ local function bowtie_annotations(result, pointers)
     return annotations
   end
   for _, annotation in ipairs(result.annotations or {}) do
-    local location = keyword_location(
-      annotation.absoluteKeywordLocation, annotation.keywordLocation, pointers)
+    local location = keyword_location(annotation, pointers)
     local keyword = location:match '[^/]*$'
     annotations[#annotations + 1] = {
       keyword = keyword,
@@ -214,16 +215,10 @@ local cmds = {
           }
         else
           local result = validator:validate(test.instance)
-          if want_annotations then
-            results[i] = {
-              valid = result.valid,
-              annotations = bowtie_annotations(result, pointers),
-            }
-          else
-            results[i] = {
-              valid = result.valid,
-            }
-          end
+          results[i] = {
+            valid = result.valid,
+            annotations = want_annotations and bowtie_annotations(result, pointers) or nil,
+          }
         end
       end
     else
